@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/NeowayLabs/neosearch"
+	"github.com/NeowayLabs/neosearch/index"
+	"github.com/jteeuwen/go-pkg-optarg"
 	"github.com/peterh/liner"
-
-	"bitbucket.org/i4k/neosearch"
-	"bitbucket.org/i4k/neosearch/index"
 )
 
 // SampleData representes data.csv
@@ -21,6 +21,40 @@ type SampleData struct {
 }
 
 func main() {
+	var fileOpt, dataDirOpt string
+	var helpOpt bool
+
+	optarg.Add("f", "file", "Read NeoSearch JSON database from file", "")
+	optarg.Add("d", "data-dir", "Data directory", "")
+	optarg.Add("h", "help", "Display this help", "")
+
+	for opt := range optarg.Parse() {
+		switch opt.ShortName {
+		case "f":
+			fileOpt = opt.String()
+		case "d":
+			dataDirOpt = opt.String()
+		case "m":
+			homeOpt = opt.String()
+		case "h":
+			helpOpt = true
+		}
+	}
+
+	if helpOpt {
+		optarg.Usage()
+		os.Exit(0)
+	}
+
+	if homeOpt == "" {
+		if homeEnv := os.Getenv("HOME"); homeEnv != "" {
+			homeOpt = homeEnv
+		}
+	}
+
+	if dataDirOpt == "" {
+		dataDirOpt, _ = os.Getwd()
+	}
 	var cmdline string
 	var index *index.Index
 	var err error
