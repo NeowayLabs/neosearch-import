@@ -3,7 +3,7 @@
 # Build
 
 ```
-go get -u github.com/NeowayLabs/neosearch
+go get -v -tags leveldb -u github.com/NeowayLabs/neosearch
 go build -v -tags leveldb
 ```
 
