@@ -30,8 +30,9 @@ mkdir /tmp/data
 Use the [neosearch-cli](https://github.com/NeowayLabs/neosearch-cli) tool:
 
 ```
-go get -v -tags leveldb github.com/NeowayLabs/neosearch-cli
-neosearch-cli -d /tmp/data
+$ go get -v -tags leveldb github.com/NeowayLabs/neosearch-cli
+$ neosearch-cli -d /tmp/data
+
 neosearch>using document.db get 0
 get: Success
 Result: {"_id":0,"authors":["Ken Thompson","Dennis Ritchie","Brian Kernighan","Douglas McIlroy","Joe Ossanna"],"family":"unix","id":1,"kernel":"unix","kernelType":"monolithic","name":"Unix","year":1971}
