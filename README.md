@@ -10,7 +10,7 @@ go build -v -tags leveldb
 # usage
 
 ```
-./neosearch-import
+$ ./neosearch-import
 [General options]
      --file, -f: Read NeoSearch JSON database from file. (Required)
    --create, -c: Create new index database
@@ -21,8 +21,8 @@ go build -v -tags leveldb
 
 Indexing the sample file:
 ```
-mkdir /tmp/data
-./neosearch-import -f samples/operating_systems.json  -c -d /tmp/data -n operating-systems
+$ mkdir /tmp/data
+$ ./neosearch-import -f samples/operating_systems.json  -c -d /tmp/data -n operating-systems
 ```
 
 # How to verify the indexed data?
