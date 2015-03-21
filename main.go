@@ -2,15 +2,14 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/NeowayLabs/neosearch"
 	"github.com/NeowayLabs/neosearch/index"
 	"github.com/jteeuwen/go-pkg-optarg"
-	"github.com/peterh/liner"
 )
 
 // SampleData representes data.csv
@@ -21,12 +20,19 @@ type SampleData struct {
 }
 
 func main() {
-	var fileOpt, dataDirOpt string
-	var helpOpt bool
+	var (
+		fileOpt, dataDirOpt, databaseName string
+		helpOpt, newIndex                 bool
+		err                               error
+		index                             *index.Index
+	)
 
-	optarg.Add("f", "file", "Read NeoSearch JSON database from file", "")
+	optarg.Header("General options")
+	optarg.Add("f", "file", "Read NeoSearch JSON database from file. (Required)", "")
+	optarg.Add("c", "create", "Create new index database", false)
+	optarg.Add("n", "name", "Name of index database", "")
 	optarg.Add("d", "data-dir", "Data directory", "")
-	optarg.Add("h", "help", "Display this help", "")
+	optarg.Add("h", "help", "Display this help", false)
 
 	for opt := range optarg.Parse() {
 		switch opt.ShortName {
@@ -34,8 +40,10 @@ func main() {
 			fileOpt = opt.String()
 		case "d":
 			dataDirOpt = opt.String()
-		case "m":
-			homeOpt = opt.String()
+		case "n":
+			databaseName = opt.String()
+		case "c":
+			newIndex = true
 		case "h":
 			helpOpt = true
 		}
@@ -46,71 +54,72 @@ func main() {
 		os.Exit(0)
 	}
 
-	if homeOpt == "" {
-		if homeEnv := os.Getenv("HOME"); homeEnv != "" {
-			homeOpt = homeEnv
-		}
-	}
-
 	if dataDirOpt == "" {
 		dataDirOpt, _ = os.Getwd()
 	}
-	var cmdline string
-	var index *index.Index
-	var err error
 
-	file := "./data.json"
-	indexName := "sample"
+	if fileOpt == "" {
+		optarg.Usage()
+		os.Exit(1)
+	}
 
 	cfg := neosearch.NewConfig()
 
-	cfg.Option(neosearch.DataDir("/data/"))
+	cfg.Option(neosearch.DataDir(dataDirOpt))
+	cfg.Option(neosearch.Debug(true))
 
 	neo := neosearch.New(cfg)
 
-	fmt.Println("args", os.Args)
-
-	if len(os.Args) == 2 {
-		index, err = neo.CreateIndex(indexName)
+	if newIndex {
+		log.Printf("Creating index %s\n", databaseName)
+		index, err = neo.CreateIndex(databaseName)
 	} else {
-		fmt.Println("Opening index...")
-		index, err = neo.OpenIndex(indexName)
+		log.Printf("Opening index %s ...\n", databaseName)
+		index, err = neo.OpenIndex(databaseName)
 	}
 
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to open database '%s': %v", err)
+		return
 	}
 
 	defer neo.Close()
 
-	jsonBytes, err := ioutil.ReadFile(file)
-	if err != nil {
-		panic(err)
-	}
-
-	var mapData []SampleData
-
-	err = json.Unmarshal(jsonBytes, &mapData)
+	jsonBytes, err := ioutil.ReadFile(fileOpt)
 
 	if err != nil {
 		panic(err)
 	}
+
+	var data []map[string]interface{}
+
+	err = json.Unmarshal(jsonBytes, &data)
+
+	if err != nil {
+		panic(err)
+	}
+
+	startTime := time.Now()
 
 	index.Batch()
 	var count int
-	totalResults := len(mapData)
+	totalResults := len(data)
 	batchSize := 100000
 
-	for idx := range mapData {
-		sampleData := mapData[idx]
+	for idx := range data {
+		dataEntry := data[idx]
 
-		dv, err := json.Marshal(&sampleData)
+		if dataEntry["_id"] == nil {
+			dataEntry["_id"] = idx
+		}
+
+		entryJSON, err := json.Marshal(&dataEntry)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return
 		}
 
-		err = index.Add(uint64(sampleData.ID), dv)
+		err = index.Add(uint64(dataEntry["_id"].(int)), entryJSON)
 		if err != nil {
 			panic(err)
 		}
@@ -125,50 +134,11 @@ func main() {
 		} else {
 			count = count + 1
 		}
-
-		//		percent := (idx * 100) / totalResults
-
-		//		if int(percent)%2 == 0 {
-		//			remainder := math.Remainder(float64(idx*100), float64(totalResults))
-
-		//			if int(remainder) == 0 {
-		//			fmt.Printf("Percent: %d\tCount: %d.\n", percent, count)
-		//			}
-		//		}
 	}
 
-	line := liner.NewLiner()
-	defer line.Close()
+	index.FlushBatch()
 
-	// command-line here
-	for {
-		if cmdline, err = line.Prompt("neosearch>"); err != nil {
-			if err.Error() == "EOF" {
-				break
-			}
+	elapsed := time.Since(startTime)
 
-			continue
-		}
-
-		line.AppendHistory(cmdline)
-
-		if strings.ToLower(cmdline) == "quit" ||
-			strings.ToLower(cmdline) == "quit;" {
-			break
-		}
-
-		docs, err := index.MatchPrefix([]byte("company_name"), []byte(cmdline))
-
-		if err != nil {
-			panic(err)
-		}
-
-		fmt.Println("Found total: ", len(docs))
-		fmt.Println("Results: ")
-
-		for _, doc := range docs {
-			fmt.Println(doc)
-		}
-	}
-
+	log.Printf("Database indexed in %v\n", elapsed)
 }
