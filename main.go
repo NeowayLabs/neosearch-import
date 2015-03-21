@@ -22,7 +22,7 @@ type SampleData struct {
 func main() {
 	var (
 		fileOpt, dataDirOpt, databaseName string
-		helpOpt, newIndex                 bool
+		helpOpt, newIndex, debugOpt       bool
 		err                               error
 		index                             *index.Index
 	)
@@ -32,6 +32,7 @@ func main() {
 	optarg.Add("c", "create", "Create new index database", false)
 	optarg.Add("n", "name", "Name of index database", "")
 	optarg.Add("d", "data-dir", "Data directory", "")
+	optarg.Add("t", "trace-debug", "Enable trace for debug", false)
 	optarg.Add("h", "help", "Display this help", false)
 
 	for opt := range optarg.Parse() {
@@ -44,6 +45,8 @@ func main() {
 			databaseName = opt.String()
 		case "c":
 			newIndex = true
+		case "t":
+			debugOpt = true
 		case "h":
 			helpOpt = true
 		}
@@ -66,7 +69,7 @@ func main() {
 	cfg := neosearch.NewConfig()
 
 	cfg.Option(neosearch.DataDir(dataDirOpt))
-	cfg.Option(neosearch.Debug(true))
+	cfg.Option(neosearch.Debug(debugOpt))
 
 	neo := neosearch.New(cfg)
 
