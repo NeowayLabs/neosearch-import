@@ -12,13 +12,6 @@ import (
 	"github.com/jteeuwen/go-pkg-optarg"
 )
 
-// SampleData representes data.csv
-type SampleData struct {
-	ID          int    `json:"id"`
-	CompanyName string `json:"company_name"`
-	Address     string `json:"address,omitempty"`
-}
-
 func main() {
 	var (
 		fileOpt, dataDirOpt, databaseName string
