@@ -2,13 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"time"
 
-	"github.com/NeowayLabs/neosearch"
-	"github.com/NeowayLabs/neosearch/index"
+	"github.com/NeowayLabs/neosearch/lib/neosearch"
+	"github.com/NeowayLabs/neosearch/lib/neosearch/index"
 	"github.com/jteeuwen/go-pkg-optarg"
 )
 
@@ -18,11 +19,13 @@ func main() {
 		helpOpt, newIndex, debugOpt       bool
 		err                               error
 		index                             *index.Index
+		batchSize                         int
 	)
 
 	optarg.Header("General options")
 	optarg.Add("f", "file", "Read NeoSearch JSON database from file. (Required)", "")
 	optarg.Add("c", "create", "Create new index database", false)
+	optarg.Add("b", "batch-size", "Batch size", 1000)
 	optarg.Add("n", "name", "Name of index database", "")
 	optarg.Add("d", "data-dir", "Data directory", "")
 	optarg.Add("t", "trace-debug", "Enable trace for debug", false)
@@ -32,6 +35,8 @@ func main() {
 		switch opt.ShortName {
 		case "f":
 			fileOpt = opt.String()
+		case "b":
+			batchSize = opt.Int()
 		case "d":
 			dataDirOpt = opt.String()
 		case "n":
@@ -100,7 +105,6 @@ func main() {
 	index.Batch()
 	var count int
 	totalResults := len(data)
-	batchSize := 100000
 
 	for idx := range data {
 		dataEntry := data[idx]
@@ -123,6 +127,7 @@ func main() {
 		if count == batchSize {
 			count = 0
 
+			fmt.Println("Flushing batch: ", idx, " from ", totalResults)
 			index.FlushBatch()
 			if idx != (totalResults - 1) {
 				index.Batch()
