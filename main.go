@@ -3,10 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
+	"os/signal"
+	"runtime"
+	"runtime/pprof"
 	"time"
+
+	"launchpad.net/gommap"
 
 	"github.com/NeowayLabs/neosearch/lib/neosearch"
 	"github.com/NeowayLabs/neosearch/lib/neosearch/index"
@@ -15,11 +19,11 @@ import (
 
 func main() {
 	var (
-		fileOpt, dataDirOpt, databaseName string
-		helpOpt, newIndex, debugOpt       bool
-		err                               error
-		index                             *index.Index
-		batchSize                         int
+		fileOpt, dataDirOpt, databaseName, profileFile string
+		helpOpt, newIndex, debugOpt                    bool
+		err                                            error
+		index                                          *index.Index
+		batchSize                                      int
 	)
 
 	optarg.Header("General options")
@@ -30,6 +34,7 @@ func main() {
 	optarg.Add("d", "data-dir", "Data directory", "")
 	optarg.Add("t", "trace-debug", "Enable trace for debug", false)
 	optarg.Add("h", "help", "Display this help", false)
+	optarg.Add("p", "cpuprofile", "write cpu profile to file", "")
 
 	for opt := range optarg.Parse() {
 		switch opt.ShortName {
@@ -45,6 +50,8 @@ func main() {
 			newIndex = true
 		case "t":
 			debugOpt = true
+		case "p":
+			profileFile = opt.String()
 		case "h":
 			helpOpt = true
 		}
@@ -64,10 +71,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	if profileFile != "" {
+		f, err := os.Create(profileFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println("Profiling to file: ", profileFile)
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
 	cfg := neosearch.NewConfig()
 
 	cfg.Option(neosearch.DataDir(dataDirOpt))
 	cfg.Option(neosearch.Debug(debugOpt))
+	cfg.Option(neosearch.KVCacheSize(1 << 30))
 
 	neo := neosearch.New(cfg)
 
@@ -84,15 +103,21 @@ func main() {
 		return
 	}
 
-	defer neo.Close()
+	file, err := os.OpenFile(fileOpt, os.O_RDONLY, 0)
 
-	jsonBytes, err := ioutil.ReadFile(fileOpt)
+	if err != nil {
+		log.Fatalf("Unable to open file: %s", fileOpt)
+		return
+	}
+
+	jsonBytes, err := gommap.Map(file.Fd(), gommap.PROT_READ,
+		gommap.MAP_PRIVATE)
 
 	if err != nil {
 		panic(err)
 	}
 
-	var data []map[string]interface{}
+	data := make([]map[string]interface{}, 0)
 
 	err = json.Unmarshal(jsonBytes, &data)
 
@@ -100,11 +125,44 @@ func main() {
 		panic(err)
 	}
 
+	jsonBytes = nil
+
 	startTime := time.Now()
 
 	index.Batch()
 	var count int
 	totalResults := len(data)
+
+	runtime.GC()
+
+	cleanup := func() {
+		neo.Close()
+		file.Close()
+		if profileFile != "" {
+			fmt.Println("stopping profile: ", profileFile)
+			pprof.StopCPUProfile()
+		}
+	}
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		<-c
+		cleanup()
+		os.Exit(1)
+	}()
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic", r)
+			cleanup()
+			os.Exit(1)
+		}
+
+		cleanup()
+	}()
+
+	fmt.Println("Importing ", len(data), " records")
 
 	for idx := range data {
 		dataEntry := data[idx]
@@ -132,12 +190,18 @@ func main() {
 			if idx != (totalResults - 1) {
 				index.Batch()
 			}
+
+			runtime.GC()
 		} else {
 			count = count + 1
 		}
+
+		data[idx] = nil
 	}
 
 	index.FlushBatch()
+	index.Close()
+	neo.Close()
 
 	elapsed := time.Since(startTime)
 
