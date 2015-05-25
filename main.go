@@ -24,12 +24,14 @@ func main() {
 		err                                            error
 		index                                          *index.Index
 		batchSize                                      int
+		cacheSize                                      uint
 	)
 
 	optarg.Header("General options")
 	optarg.Add("f", "file", "Read NeoSearch JSON database from file. (Required)", "")
 	optarg.Add("c", "create", "Create new index database", false)
 	optarg.Add("b", "batch-size", "Batch size", 1000)
+	optarg.Add("z", "cache-size", "Storage cache size", 1<<30)
 	optarg.Add("n", "name", "Name of index database", "")
 	optarg.Add("d", "data-dir", "Data directory", "")
 	optarg.Add("t", "trace-debug", "Enable trace for debug", false)
@@ -42,6 +44,8 @@ func main() {
 			fileOpt = opt.String()
 		case "b":
 			batchSize = opt.Int()
+		case "z":
+			cacheSize = opt.Uint()
 		case "d":
 			dataDirOpt = opt.String()
 		case "n":
@@ -66,7 +70,7 @@ func main() {
 		dataDirOpt, _ = os.Getwd()
 	}
 
-	if fileOpt == "" {
+	if fileOpt == "" || cacheSize == 0 {
 		optarg.Usage()
 		os.Exit(1)
 	}
@@ -86,7 +90,7 @@ func main() {
 
 	cfg.Option(neosearch.DataDir(dataDirOpt))
 	cfg.Option(neosearch.Debug(debugOpt))
-	cfg.Option(neosearch.KVCacheSize(1 << 30))
+	cfg.Option(neosearch.KVCacheSize(int(cacheSize)))
 
 	neo := neosearch.New(cfg)
 
